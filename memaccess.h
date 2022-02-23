@@ -1,3 +1,17 @@
+#include <assert.h>
+#include <fcntl.h>
+#include <immintrin.h>
+#include <pthread.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <time.h>
+#include <unistd.h>
+#include <string.h>
+#include <string>
+
 #define SIZEBTNT_64_AVX512		\
 				"vmovntdq  %%zmm0,  0x0(%%r14, %%r15) \n\t" \
 				"add $0x40, %%r15 \n\t"
@@ -231,3 +245,10 @@
 			"mov 0x28(%%r14, %%r15), %%r13  \n\t" \
 			"mov 0x30(%%r14, %%r15), %%r13  \n\t" \
 			"mov 0x38(%%r14, %%r15), %%r13  \n\t" 
+
+void bindCore(uint16_t core);
+void fastMemcpy(void* pvDest, void* pvSrc, size_t nBytes);
+
+#define RDRAND_MAX_RETRY 10
+static inline int get_rand(uint64_t *rd, uint64_t range);
+int init_chasing_index(uint64_t* cindex, uint64_t csize, bool is_seq, int access_size);
