@@ -1,4 +1,6 @@
 #include "memaccess.h"
+#include <algorithm>
+#include <random>
 
 void bindCore(uint16_t core) {
     cpu_set_t cpuset;
@@ -21,44 +23,31 @@ void fastMemcpy(void* pvDest, void* pvSrc, size_t nBytes) {
     for (; nVects > 0; nVects--, pSrc++, pDest++) {
         const __m256i loaded = _mm256_stream_load_si256(pSrc);
         _mm256_stream_si256(pDest, loaded);
+        // _mm256_store_epi64(pDest, loaded);
+        // _mm_clwb(pDest);
     }
     _mm_sfence();
 }
 
-static inline int get_rand(uint64_t* rd, uint64_t range){
-    uint8_t ok;
-    int i = 0;
-    for (i = 0; i < RDRAND_MAX_RETRY; i++) {
-        asm volatile("rdrand %0; setc %1\n\t" : "=r"(*rd), "=qm"(ok));
-
-        if (ok) {
-            *rd = *rd % range;
-            return 0;
-        }
-    }
-
-    return 1;
-}
-
-int init_chasing_index(uint64_t* cindex, uint64_t csize, bool is_seq, int access_size){
+int init_chasing_index(uint64_t* cindex,
+                       uint64_t csize,
+                       bool is_seq,
+                       int access_size) {
     uint64_t curr_pos = 0;
     uint64_t i = 0;
-    int ret = 0;
-    if(access_size % 64)
+    if (access_size % 64)
         assert(0);
 
     memset(cindex, 0, sizeof(uint64_t) * csize);
 
     for (i = 0; i < csize - 1; i++) {
-        if(!is_seq){
-            ret = get_rand(&curr_pos, csize);
-        }
-        else {
-            curr_pos = i;
-        }
-        cindex[i] = curr_pos * access_size / 64;
-        if (ret != 0)
-            return 1;
+        cindex[i] = i * access_size / 64;
+    }
+
+    if (!is_seq) {
+        static std::random_device rd;
+        static std::mt19937 rng(rd());
+        std::shuffle(cindex, cindex + csize, rd);
     }
 
     return 0;

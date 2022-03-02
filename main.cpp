@@ -21,62 +21,24 @@ inline double time_diff_ms(timespec time1, timespec time2) {
 static int thread_num = 1;
 static int access_size = 64;
 static bool is_seq = 1;
+static uint64_t csize;  
+static uint64_t* cindex;    
 
 void* WriteMem(void* thread_arg){
     struct thread_data* arg = (struct thread_data*)thread_arg;
     __uint64_t* mem = arg->mem;
-    printf("thread %d, memaddr=%p\n", arg->thread_id, mem);
     bindCore(arg->thread_id);
 
     void* src_array = malloc(access_size);
     memset(src_array, 1, access_size);
 
-    // __m512 va;
-    // float af[16] __attribute__((aligned(64)));
     timespec start_time, end_time;
-
-    // uint64_t i = 0;
-    // for (i = 0; i < 16; i++)
-    //     af[i] = (float)i;
-    // va = _mm512_load_ps(af);
-
     double overall_time = 0;
-    // i = 0;
-    // // set registers for writing memory
-    // // %r15 for array address offset, %r14 for base address
-    // __asm__(
-    //     "xor %%r15, %%r15\n\t"
-    //     "mov %0, %%r14\n\t"
-    //     :: "r"(mem) : "%r15", "%r14");
-    // while (i < 100000) {
-    //     __asm__ volatile(SIZEBTNT_64_AVX512 "sfence\n\t" ::
-    //                          : "%r14", "%r15", "memory");
-    //     i++;
-    // }
-
-    // create an array for random or sequential offsets
-    uint64_t csize = TEST_SIZE;
-    uint64_t* cindex = (uint64_t*)malloc(sizeof(uint64_t) * csize);
-    init_chasing_index(cindex, csize, is_seq, access_size);
-
-    // i = 0;
-    // __asm__(
-    //     "xor %%r15, %%r15\n\t"
-    //     "mov %0, %%r14\n\t"
-    //     :: "r"(mem) : "%r15", "%r14");
 
     // start testing
     int i = 0;
     clock_gettime(CLOCK_REALTIME, &start_time);
     while(i < TEST_SIZE){
-    //     __asm__ volatile(
-    //         SIZEBTNT_256_AVX512
-    //         "movq (%0, %1, 8), %%r15\n\t"
-    //         "sfence\n\t"
-    //         :
-    //         :"r"(cindex), "r"(i)
-    //         :"%r15", "%r14", "memory"
-    //     );
         fastMemcpy(mem+cindex[i++], src_array, access_size);
     }
     clock_gettime(CLOCK_REALTIME, &end_time);
@@ -95,7 +57,7 @@ int main(int argc, char* argv[]) {
     // argv[3] is "seq" for sequential or others for random write;
     thread_num = std::stoi(argv[1], nullptr, 10);
     access_size = std::stoi(argv[2], nullptr, 10);
-    is_seq = 1 ? strcmp(argv[3], "seq\n") : 0;
+    is_seq = strcmp(argv[3], "seq")==0 ? 1 : 0;
     printf("Test with %d threads, %dB granularity, %sly\n", thread_num, access_size, is_seq? "sequential": "random");
 
     int fd = 0;
@@ -120,13 +82,16 @@ int main(int argc, char* argv[]) {
     }
     printf("mmap succeeded, at %p.\n", p_map);
 
+    csize = TEST_SIZE;
+    cindex = (uint64_t*)malloc(sizeof(uint64_t) * csize);
+    init_chasing_index(cindex, csize, is_seq, access_size);
+
     // create multiple threads to do the PM I/O test
     // manually modify THREAD_NUM and IO granularity and record, haven't written
     // any automatic script yet
     int i = 1;
     double sum_iops = 0;
     for (i = 0; i < THREAD_NUM; i++) {
-        printf("main(): creating thread %d\n", i);
         td[i].thread_id = i;
         td[i].mem = p_map + FILE_SIZE / THREAD_NUM / 8 * i;
         td[i].iops = 0;
