@@ -5,7 +5,7 @@
 #define FILE_SIZE 0x2000000000  // 256GB
 #define THREAD_NUM thread_num
 #define MAX_THREAD_NUM 32
-#define TEST_SIZE 8000000
+#define TEST_SIZE 5000000
 
 struct thread_data {
     __uint64_t* mem;
@@ -28,59 +28,63 @@ void* WriteMem(void* thread_arg){
     printf("thread %d, memaddr=%p\n", arg->thread_id, mem);
     bindCore(arg->thread_id);
 
-    __m512 va;
-    float af[16] __attribute__((aligned(64)));
+    void* src_array = malloc(access_size);
+    memset(src_array, 1, access_size);
+
+    // __m512 va;
+    // float af[16] __attribute__((aligned(64)));
     timespec start_time, end_time;
 
-    uint64_t i = 0;
-    for (i = 0; i < 16; i++)
-        af[i] = (float)i;
-    va = _mm512_load_ps(af);
+    // uint64_t i = 0;
+    // for (i = 0; i < 16; i++)
+    //     af[i] = (float)i;
+    // va = _mm512_load_ps(af);
 
     double overall_time = 0;
-    i = 0;
-    // set registers for writing memory
-    // %r15 for array address offset, %r14 for base address
-    __asm__(
-        "xor %%r15, %%r15\n\t"
-        "mov %0, %%r14\n\t"
-        :: "r"(mem) : "%r15", "%r14");
-    while (i < 100000) {
-        __asm__ volatile(SIZEBTNT_64_AVX512 "sfence\n\t" ::
-                             : "%r14", "%r15", "memory");
-        i++;
-    }
+    // i = 0;
+    // // set registers for writing memory
+    // // %r15 for array address offset, %r14 for base address
+    // __asm__(
+    //     "xor %%r15, %%r15\n\t"
+    //     "mov %0, %%r14\n\t"
+    //     :: "r"(mem) : "%r15", "%r14");
+    // while (i < 100000) {
+    //     __asm__ volatile(SIZEBTNT_64_AVX512 "sfence\n\t" ::
+    //                          : "%r14", "%r15", "memory");
+    //     i++;
+    // }
 
     // create an array for random or sequential offsets
     uint64_t csize = TEST_SIZE;
     uint64_t* cindex = (uint64_t*)malloc(sizeof(uint64_t) * csize);
     init_chasing_index(cindex, csize, is_seq, access_size);
 
-    i = 0;
-    __asm__(
-        "xor %%r15, %%r15\n\t"
-        "mov %0, %%r14\n\t"
-        :: "r"(mem) : "%r15", "%r14");
+    // i = 0;
+    // __asm__(
+    //     "xor %%r15, %%r15\n\t"
+    //     "mov %0, %%r14\n\t"
+    //     :: "r"(mem) : "%r15", "%r14");
 
     // start testing
+    int i = 0;
     clock_gettime(CLOCK_REALTIME, &start_time);
     while(i < TEST_SIZE){
-        __asm__ volatile(
-            SIZEBTNT_256_AVX512
-            "movq (%0, %1, 8), %%r15\n\t"
-            "sfence\n\t"
-            :
-            :"r"(cindex), "r"(i)
-            :"%r15", "%r14", "memory"
-        );
-        i++;
+    //     __asm__ volatile(
+    //         SIZEBTNT_256_AVX512
+    //         "movq (%0, %1, 8), %%r15\n\t"
+    //         "sfence\n\t"
+    //         :
+    //         :"r"(cindex), "r"(i)
+    //         :"%r15", "%r14", "memory"
+    //     );
+        fastMemcpy(mem+cindex[i++], src_array, access_size);
     }
     clock_gettime(CLOCK_REALTIME, &end_time);
     overall_time = time_diff_ms(start_time, end_time) / 1000;
-    arg->iops = (double)i / overall_time;
+    arg->iops = (double)i / overall_time * access_size / 0x100000;
 
-    printf("thread %d: IOPS = %fK, time = %lfs\n", arg->thread_id,
-           arg->iops / 1000, overall_time);
+    printf("thread %d: IOPS = %fMB/s, time = %lfs\n", arg->thread_id,
+           arg->iops, overall_time);
     pthread_exit(NULL);
 
 }
@@ -143,7 +147,7 @@ int main(int argc, char* argv[]) {
         }
         sum_iops += td[i].iops;
     }
-    printf("Sum IOPS = %dK\n", (int)(sum_iops / 1000));
+    printf("Sum IOPS = %dMB/s\n", (int)(sum_iops));
 
     munmap(p_map, FILE_SIZE);
 

@@ -52,12 +52,11 @@ int init_chasing_index(uint64_t* cindex, uint64_t csize, bool is_seq, int access
     for (i = 0; i < csize - 1; i++) {
         if(!is_seq){
             ret = get_rand(&curr_pos, csize);
-            cindex[i] = curr_pos * 512;
         }
         else {
             curr_pos = i;
-            cindex[i] = curr_pos * access_size;
         }
+        cindex[i] = curr_pos * access_size / 64;
         if (ret != 0)
             return 1;
     }
