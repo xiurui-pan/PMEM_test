@@ -17,14 +17,20 @@ void fastMemcpy(void* pvDest, void* pvSrc, size_t nBytes) {
     assert(nBytes % 32 == 0);
     assert((intptr_t(pvDest) & 31) == 0);
     assert((intptr_t(pvSrc) & 31) == 0);
+
+    // uint64_t* pDest = reinterpret_cast<uint64_t*>(pvDest);
+    // int64_t nVects = nBytes / sizeof(*pDest);
+    // for (; nVects > 0; nVects-=8, pDest+=8) {
+    //     pDest[0] = 1;
+    //     _mm_clwb(pDest);
+    // }
+
     const __m256i* pSrc = reinterpret_cast<const __m256i*>(pvSrc);
     __m256i* pDest = reinterpret_cast<__m256i*>(pvDest);
     int64_t nVects = nBytes / sizeof(*pSrc);
     for (; nVects > 0; nVects--, pSrc++, pDest++) {
         const __m256i loaded = _mm256_stream_load_si256(pSrc);
         _mm256_stream_si256(pDest, loaded);
-        // _mm256_store_epi64(pDest, loaded);
-        // _mm_clwb(pDest);
     }
     _mm_sfence();
 }
@@ -40,8 +46,8 @@ int init_chasing_index(uint64_t* cindex,
 
     memset(cindex, 0, sizeof(uint64_t) * csize);
 
-    for (i = 0; i < csize - 1; i++) {
-        cindex[i] = i * access_size / 64;
+    for (i = 0; i < csize; i++) {
+        cindex[i] = i * access_size / 8;
     }
 
     if (!is_seq) {

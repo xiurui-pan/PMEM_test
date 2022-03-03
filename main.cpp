@@ -39,6 +39,7 @@ void* WriteMem(void* thread_arg){
     int i = 0;
     clock_gettime(CLOCK_REALTIME, &start_time);
     while(i < TEST_SIZE){
+        // printf("%p\n", mem+cindex[i]);
         fastMemcpy(mem+cindex[i++], src_array, access_size);
     }
     clock_gettime(CLOCK_REALTIME, &end_time);
@@ -68,7 +69,7 @@ int main(int argc, char* argv[]) {
     // open the test file
     fd = open("/mnt/pm0/test", O_RDWR | O_CREAT | O_TRUNC, S_IRUSR | S_IWUSR,
               0666);
-    printf("fd = %d\n", fd);
+    // printf("fd = %d\n", fd);
     ftruncate(fd, 0);
     ftruncate(fd, FILE_SIZE);
 
