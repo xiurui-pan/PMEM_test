@@ -11,11 +11,17 @@ struct thread_data {
     __uint64_t* mem;
     int thread_id;
     double iops;
+    uint16_t core;
 } __attribute__((aligned(64)));
 
 inline double time_diff_ms(timespec time1, timespec time2) {
     return (time2.tv_sec - time1.tv_sec) * 1000 +
            (double)(time2.tv_nsec - time1.tv_nsec) / 1000000;
+}
+
+inline uint16_t parse_core_id(char* core_array, int id){
+    char num[] = {core_array[3*id], core_array[3*id+1], '\0'};
+    return std::stoi(num);
 }
 
 static int thread_num = 1;
@@ -27,7 +33,7 @@ static uint64_t* cindex;
 void* WriteMem(void* thread_arg){
     struct thread_data* arg = (struct thread_data*)thread_arg;
     __uint64_t* mem = arg->mem;
-    bindCore(arg->thread_id);
+    bindCore(arg->core);
 
     void* src_array = malloc(access_size);
     memset(src_array, 1, access_size);
@@ -46,8 +52,8 @@ void* WriteMem(void* thread_arg){
     overall_time = time_diff_ms(start_time, end_time) / 1000;
     arg->iops = (double)i / overall_time * access_size / 0x100000;
 
-    printf("thread %d: IOPS = %fMB/s, time = %lfs\n", arg->thread_id,
-           arg->iops, overall_time);
+    // printf("thread %d: IOPS = %fMB/s, time = %lfs\n", arg->thread_id,
+        //    arg->iops, overall_time);
     pthread_exit(NULL);
 
 }
@@ -56,10 +62,11 @@ int main(int argc, char* argv[]) {
     // argv[1] is thread num, 
     // argv[2] is access size/B, 
     // argv[3] is "seq" for sequential or others for random write;
+    // argv[4] is a num string for cpu affinity
     thread_num = std::stoi(argv[1], nullptr, 10);
     access_size = std::stoi(argv[2], nullptr, 10);
     is_seq = strcmp(argv[3], "seq")==0 ? 1 : 0;
-    printf("Test with %d threads, %dB granularity, %sly\n", thread_num, access_size, is_seq? "sequential": "random");
+    // printf("Test with %d threads, %dB granularity, %sly\n", thread_num, access_size, is_seq? "sequential": "random");
 
     int fd = 0;
     __uint64_t* p_map;
@@ -81,7 +88,7 @@ int main(int argc, char* argv[]) {
         munmap(p_map, FILE_SIZE);
         assert(0);
     }
-    printf("mmap succeeded, at %p.\n", p_map);
+    // printf("mmap succeeded, at %p.\n", p_map);
 
     csize = TEST_SIZE;
     cindex = (uint64_t*)malloc(sizeof(uint64_t) * csize);
@@ -96,6 +103,7 @@ int main(int argc, char* argv[]) {
         td[i].thread_id = i;
         td[i].mem = p_map + FILE_SIZE / THREAD_NUM / 8 * i;
         td[i].iops = 0;
+        td[i].core = parse_core_id(argv[4], i);
         int ret = pthread_create(&threads[i], NULL, WriteMem, (void*)&(td[i]));
         if (ret != 0) {
             printf("pthread_create error: error_code = %d\n", ret);
@@ -113,8 +121,8 @@ int main(int argc, char* argv[]) {
         }
         sum_iops += td[i].iops;
     }
-    printf("Sum IOPS = %dMB/s\n", (int)(sum_iops));
-
+    // printf("Sum IOPS = %dMB/s\n", (int)(sum_iops));
+    printf("%d\n", (int)(sum_iops));
     munmap(p_map, FILE_SIZE);
 
     return 0;
